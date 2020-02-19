@@ -14,11 +14,6 @@ router.get('/', async (req, res) => {
 router.get('/1h/:count', async (req, res) => {
 	let result = [];
 	const currentHour = priceVolume.getCurrentHourCollection();
-	// TODO find first with id and v.. make new objects without them
-	// because there is still an error where it inserts new while there is that price/side already
-	// and i think its because mongoose uses the cache and it cant find findOne without id and v ????
-	// TODO before changing check if closing the app suddenly creates that error
-	// and duplicates have strange property order.. side, size, price
 	let currentHourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
 	result = fastSort(currentHourData).asc((d) => d.price);
 	for (let i = 1; i < req.params.count; i++) {
@@ -57,11 +52,6 @@ router.get('/1h/:count', async (req, res) => {
 router.get('/1h/check/:count', async (req, res) => {
 	let result = [];
 	const currentHour = priceVolume.getCurrentHourCollection();
-	// TODO find first with id and v.. make new objects without them
-	// because there is still an error where it inserts new while there is that price/side already
-	// and i think its because mongoose uses the cache and it cant find findOne without id and v ????
-	// TODO before changing check if closing the app suddenly creates that error
-	// and duplicates have strange property order.. side, size, price
 	let currentHourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
 	result = fastSort(currentHourData).asc(d=>d.price);
 	for (let i = 1; i < req.params.count; i++) {

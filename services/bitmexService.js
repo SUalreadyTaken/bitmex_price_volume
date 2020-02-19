@@ -2,11 +2,14 @@ const request = require('request');
 const priceVolume = require('../models/priceVolume.js');
 const dotenv = require('dotenv');
 const crypto = require('crypto');
+const sleep = require('util').promisify(setTimeout);
+const fastSort = require('fast-sort');
 
 dotenv.config({ path: '../config.env' });
 
 let lastTradeId;
 let lastTimestamp;
+let insertsDone = true;
 
 const SECRET = process.env.API_KEY;
 const API_ID = process.env.API_ID;
@@ -35,113 +38,164 @@ const requestOptions = {
 };
 
 function requestData(boolean) {
-	// TODO error handling
-	// request can come back as 502 bad request.. handle it
 	// main app
-	// if (boolean) getData();
-	// alternative app
-	if (!boolean) getData();
+	// if (insertsDone && boolean) getData();
+	// FIXME alternative app
+	if (insertsDone && (!boolean && boolean != undefined)) getData();
 }
 
 function getData() {
+	insertsDone = false;
 	request(requestOptions, async (err, res, body) => {
+		const start = new Date();
 		if (err) {
 			console.log('ERROR in bitmex request');
 			console.log(err);
+			const needToSleep = 1100 - (new Date() - start);
+			if (needToSleep > 0) {
+				await sleep(needToSleep);
+			}
+			insertsDone = true;
 			return;
 		}
 
-		let json = '';
-		try {
-			json = JSON.parse(body);
-		} catch (error) {
-			console.log(new Date().toLocaleTimeString() + 'Error in paring json');
-			console.log(body);
-			console.log(error);
-			return;
-		}
+		if (res.statusCode == 200) {
+			let json = JSON.parse(body);
 
-		let tmpTrades = [];
-		// push needed trades to tmpTrades
-		if (!lastTradeId) {
-			console.log('should see this only once');
-			for (trade of json) {
-				let tmp = {
-					price: trade.price,
-					side: trade.side,
-					size: trade.size
-				};
-				tmpTrades.push(tmp);
+			let tmpTrades = [];
+			// push needed trades to tmpTrades
+			if (!lastTradeId) {
+				console.log('should see this only once');
+				for (trade of json) {
+					let tmp = {
+						price: trade.price,
+						side: trade.side,
+						size: trade.size
+					};
+					tmpTrades.push(tmp);
+				}
+			} else {
+				for (trade of json) {
+					// FIXME should be ok now to remove timestamp ??
+					if (trade.trdMatchID === lastTradeId || lastTimestamp > trade.timestamp) {
+						break;
+					}
+					let tmp = {
+						price: trade.price,
+						side: trade.side,
+						size: trade.size
+					};
+					tmpTrades.push(tmp);
+				}
+			}
+
+			if (tmpTrades.length > 0) {
+				lastTradeId = json[0].trdMatchID;
+				lastTimestamp = json[0].timestamp;
+				if (tmpTrades.length > 900) {
+					console.log(new Date().toLocaleTimeString() + ' length over 900 actual > ' + tmpTrades.length);
+				}
+				// merge tmpTrades for fewer queries
+				let trades = [];
+				if (tmpTrades.length > 1) {
+					for (tmp of tmpTrades) {
+						let found = false;
+						for (trade of trades) {
+							if (tmp.price == trade.price && tmp.side == trade.side) {
+								trade.size = trade.size + tmp.size;
+								found = true;
+								break;
+							}
+						}
+						if (!found) {
+							trades.push(tmp);
+						}
+					}
+				} else {
+					trades = tmpTrades;
+				}
+
+				const priceVolumeModel = priceVolume.getCurrentHourCollection();
+				let newPrices = [];
+				let updateBulk = [];
+				let existingPrices = await priceVolumeModel.find({}).exec();
+				existingPrices = fastSort(existingPrices).asc((d) => d.price);
+				for (trade of trades) {
+					let found = binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);
+					if (!isNaN(found)) {
+						let find = [found - 1, found, found + 1];
+						let difSide = true;
+						for (x of find) {
+							if (x >= 0 && x <= existingPrices.length - 1) {
+								if (existingPrices[x].price == trade.price && existingPrices[x].side == trade.side) {
+									const newSize = existingPrices[x].size + trade.size;
+									difSide = false;
+									updateBulk.push({
+										updateOne: {
+											filter: { price: trade.price, side: trade.side },
+											update: { size: newSize }
+										}
+									});
+									break;
+								}
+							}
+						}
+						if (difSide) {
+							newPrices.push(new priceVolumeModel(trade));
+						}
+					} else {
+						newPrices.push(new priceVolumeModel(trade));
+					}
+				}
+
+
+				if (updateBulk.length > 0) {
+					await priceVolumeModel.bulkWrite(updateBulk).catch((err) => {
+						console.log(err);
+					});
+				}
+				if (newPrices.length > 0) {
+					await priceVolumeModel.insertMany(newPrices).catch((err) => {
+						console.log(err);
+					});
+				}
+				if (tmpTrades.length > 500) {
+					console.log(
+						new Date().toLocaleTimeString() +
+							' | Time > ' +
+							(new Date() - start) +
+							' | size > ' +
+							tmpTrades.length +
+							' | mergeSize > ' +
+							trades.length
+					);
+				}
 			}
 		} else {
-			for (trade of json) {
-				// seems to work with || timestamp.. dunno do they remove trades ??
-				// it still fks up some numbers because different trades can have same timestamp..multiple inserts
-				if (trade.trdMatchID === lastTradeId || lastTimestamp > trade.timestamp) {
-					break;
-				}
-				let tmp = {
-					price: trade.price,
-					side: trade.side,
-					size: trade.size
-				};
-				tmpTrades.push(tmp);
-			}
+			// If you are limited, you will receive a 429 response and an additional header, Retry-After,
+			// that indicates the number of seconds you should sleep before retrying.
+			// TODO see if i get it
+			console.log(res.headers);
+			console.log('status isnt 200 it is > ' + res.statusCode);
 		}
-
-		if (tmpTrades.length > 0) {
-			lastTradeId = json[0].trdMatchID;
-			lastTimestamp = json[0].timestamp;
+		const needToSleep = 1100 - (new Date() - start);
+		if (needToSleep > 0) {
+			// console.log('need to sleep > ' + needToSleep);
+			await sleep(needToSleep);
 		}
-
-		// for debug
-		if (tmpTrades.length > 900) {
-			console.log(new Date().toLocaleTimeString() + ' length over 900 actual > ' + tmpTrades.length);
-		}
-
-		// merge tmpTrades for fewer queries
-		// only 1k max elements dont really need binary search
-		let trades = [];
-		for (tmp of tmpTrades) {
-			let found = false;
-			for (trade of trades) {
-				if (tmp.price == trade.price && tmp.side == trade.side) {
-					trade.size = trade.size + tmp.size;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				trades.push(tmp);
-			}
-		}
-
-		const priceVolumeModel = priceVolume.getCurrentHourCollection();
-		for (trade of trades) {
-			const existing = {
-				price: trade.price,
-				side: trade.side
-			};
-			// find existing document
-			const alreadyExists = await priceVolumeModel
-				.findOne(existing)
-				.exec()
-				.catch((err) => console.log('Error in finding existing > ' + err));
-
-			if (!alreadyExists) {
-				// if not existing document create new
-				const doc = new priceVolumeModel(trade);
-				await doc.save().catch((err) => console.log('Error in adding new > ' + err));
-			} else {
-				// if already exists update size
-				const newSize = alreadyExists.size + trade.size;
-				await priceVolumeModel
-					.findOneAndUpdate(existing, { size: newSize })
-					.exec()
-					.catch((err) => console.log('Error in updating > ' + err));
-			}
-		}
+		insertsDone = true;
 	});
+}
+
+function binarySearch(arr, x, start, end) {
+	if (start > end) return 'nope';
+
+	let mid = Math.floor((start + end) / 2);
+
+	if (arr[mid].price == x) return mid;
+
+	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
+	else return binarySearch(arr, x, mid + 1, end);
 }
 
 module.exports = { requestData };
