@@ -33,16 +33,16 @@ let alternativeBoolean = undefined;
 if (process.env.USE_ALTERNATIVE_APPS) {
 	getAlternativeBoolean();
 	// // ping heroku app so it doesn't fall asleep
-	setInterval(() => bitmexService.requestData(alternativeBoolean), 150);
+	setInterval(() => bitmexService.requestData(alternativeBoolean), 100);
 	setInterval(() => {
 		// main app
-		// if (alternativeBoolean) request(process.env.HEROKU_URL + 'pricevolume/1h/check/24');
+		// if (alternativeBoolean) request(process.env.HEROKU_URL + 'pricevolume/');
 		// FIXME alternative app
-		if (!alternativeBoolean && alternativeBoolean != undefined)
-			request(process.env.HEROKU_URL + 'pricevolume/1h/check/24');
+		if (!alternativeBoolean && alternativeBoolean != undefined) request(process.env.HEROKU_URL + 'pricevolume/');
 	}, 240000);
 } else {
-	setInterval(() => bitmexService.requestData(true), 150);
+	setInterval(() => bitmexService.requestData(true), 100);
+	setInterval(() => request(process.env.HEROKU_URL + 'pricevolume/'), 240000);
 }
 
 async function getAlternativeBoolean() {
@@ -80,14 +80,14 @@ async function switchToAlternative() {
 			{ alternativeApp: !alternativeBoolean },
 			{ alternativeApp: alternativeBoolean }
 		).exec();
+		const switchIn = Date.now() + process.env.SWITCH_TIME_MILLIS;
+		await AlternativeModel.findOneAndUpdate(alternativeBoolean, { switchTime: switchIn }).exec();
 		for (let i = 0; i < 48; i++) {
 			console.error('alternative app still isnt awake');
 			const response = await fetch(process.env.HEROKU_URL_ALTERNATIVE + 'pricevolume/1h/1');
 			if (response.ok) {
 				status200 = !status200;
 				console.log('alternative app is awake');
-				const switchIn = Date.now() + process.env.SWITCH_TIME_MILLIS;
-				await AlternativeModel.findOneAndUpdate(alternativeBoolean, { switchTime: switchIn }).exec();
 				break;
 			}
 			await sleep(5000);

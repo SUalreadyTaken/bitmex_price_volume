@@ -48,10 +48,12 @@ function getData() {
 	insertsDone = false;
 	request(requestOptions, async (err, res, body) => {
 		const start = new Date();
+		const t = new Date();
+		const currentTimestamp = t.setHours(t.getHours(), 0, 0, 0) / 1000;
 		if (err) {
 			console.log('ERROR in bitmex request');
 			console.log(err);
-			const needToSleep = 1100 - (new Date() - start);
+			const needToSleep = 1000 - (new Date() - start);
 			if (needToSleep > 0) {
 				await sleep(needToSleep);
 			}
@@ -70,7 +72,8 @@ function getData() {
 					let tmp = {
 						price: trade.price,
 						side: trade.side,
-						size: trade.size
+						size: trade.size, 
+						timestamp: currentTimestamp
 					};
 					tmpTrades.push(tmp);
 				}
@@ -83,7 +86,8 @@ function getData() {
 					let tmp = {
 						price: trade.price,
 						side: trade.side,
-						size: trade.size
+						size: trade.size,
+						timestamp: currentTimestamp
 					};
 					tmpTrades.push(tmp);
 				}
@@ -115,10 +119,9 @@ function getData() {
 					trades = tmpTrades;
 				}
 
-				const priceVolumeModel = priceVolume.getCurrentHourCollection();
-				let newPrices = [];
 				let updateBulk = [];
-				let existingPrices = await priceVolumeModel.find({}).exec();
+				const model = priceVolume.getCurrentDayCollectionModel();
+				let existingPrices = await model.find({timestamp : currentTimestamp}).exec();
 				existingPrices = fastSort(existingPrices).asc((d) => d.price);
 				for (trade of trades) {
 					let found = binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);
@@ -141,24 +144,19 @@ function getData() {
 							}
 						}
 						if (difSide) {
-							newPrices.push(new priceVolumeModel(trade));
+							updateBulk.push({ insertOne: { document: new model(trade) } });
 						}
 					} else {
-						newPrices.push(new priceVolumeModel(trade));
+						updateBulk.push({ insertOne: { document: new model(trade) } });
 					}
 				}
 
-
 				if (updateBulk.length > 0) {
-					await priceVolumeModel.bulkWrite(updateBulk).catch((err) => {
+					await model.bulkWrite(updateBulk).catch((err) => {
 						console.log(err);
 					});
 				}
-				if (newPrices.length > 0) {
-					await priceVolumeModel.insertMany(newPrices).catch((err) => {
-						console.log(err);
-					});
-				}
+
 				if (tmpTrades.length > 500) {
 					console.log(
 						new Date().toLocaleTimeString() +
@@ -174,13 +172,11 @@ function getData() {
 		} else {
 			// If you are limited, you will receive a 429 response and an additional header, Retry-After,
 			// that indicates the number of seconds you should sleep before retrying.
-			// TODO see if i get it
 			console.log(res.headers);
 			console.log('status isnt 200 it is > ' + res.statusCode);
 		}
-		const needToSleep = 1100 - (new Date() - start);
+		const needToSleep = 1000 - (new Date() - start);
 		if (needToSleep > 0) {
-			// console.log('need to sleep > ' + needToSleep);
 			await sleep(needToSleep);
 		}
 		insertsDone = true;

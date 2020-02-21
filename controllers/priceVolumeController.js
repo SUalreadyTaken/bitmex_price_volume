@@ -1,86 +1,131 @@
-const request = require('request');
 const router = require('express').Router();
 const priceVolume = require('../models/priceVolume.js');
 const fastSort = require('fast-sort');
 
-router.get('/', async (req, res) => {
-	const currentHour = priceVolume.getCurrentHourCollection();
-	const timestamp = currentHour.collection.collectionName.split('_')[1];
-	let hourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
-	const result = { timestamp: timestamp, data: hourData };
-	res.send(result);
+router.get('/', (req, res) => {
+	res.send({time:Date.now()});
 });
 
 router.get('/1h/:count', async (req, res) => {
 	let result = [];
-	const currentHour = priceVolume.getCurrentHourCollection();
-	let currentHourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
-	result = fastSort(currentHourData).asc((d) => d.price);
-	for (let i = 1; i < req.params.count; i++) {
-		const pastHour = priceVolume.getPastHourCollection(i);
-		let hourData = await pastHour.find({}, { _id: 0, __v: 0 }).exec();
-		let newData = [];
-		for (data of hourData) {
-			let found = binarySearch(result, data.price, 0, result.length - 1);
-			if (!isNaN(found)) {
-				let find = [found - 1, found, found + 1];
-				let difSide = true;
-				for (x of find) {
-					if (x >= 0 && x <= result.length - 1) {
-						if (result[x].price == data.price && result[x].side == data.side) {
-							result[x].size = result[x].size + data.size;
-							difSide = false;
-							break;
-						}
+	if (req.params.count > 0) {
+		const currentTime = new Date();
+		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
+		let hoursOver = req.params.count - (currentTime.getHours() + 1);
+		let model = priceVolume.getCurrentDayCollectionModel();
+
+		if (hoursOver <= 0) {
+			// push todays data >= request lastTimestamp
+			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
+			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
+			for (let i = 0; i < req.params.count; i++) {
+				const findStamp = currentTimestamp - i * 60 * 60;
+				const tmpResult = pushDataAndRemove(findStamp, data, result);
+				result = tmpResult.result;
+				data = tmpResult.data;
+			}
+		} else {
+			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+			for (let i = 0; i <= currentTime.getHours(); i++) {
+				const findStamp = currentTimestamp - i * 60 * 60;
+				const tmpResult = pushDataAndRemove(findStamp, todaysData, result);
+				result = tmpResult.result;
+				todaysData = tmpResult.data;
+			}
+			let needDays = 0;
+			hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
+			for (let i = 0; i < needDays; i++) {
+				const highTimestamp = model.modelName.split('_')[1];
+				model = priceVolume.getPastDaysCollectionModel(i + 1);
+				if (Math.floor(hoursOver / 24) != 0) {
+					// take the whole days data
+					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+					hoursOver = hoursOver - 24;
+					for (let j = 1; j <= 24; j++) {
+						const findStamp = highTimestamp - j * 60 * 60;
+						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
+						result = tmpResult.result;
+						thatDaysData = tmpResult.data;
+					}
+				} else {
+					// take only few hours
+					const lastTimestamp = highTimestamp - hoursOver * 60 * 60;
+					let thatDaysData = await model
+						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
+						.exec();
+					for (let j = 1; j <= hoursOver; j++) {
+						const findStamp = highTimestamp - j * 60 * 60;
+						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
+						result = tmpResult.result;
+						thatDaysData = tmpResult.data;
 					}
 				}
-				if (difSide) {
-					newData.push(data);
-				}
-			} else {
-				newData.push(data);
 			}
 		}
-		result = result.concat(newData);
-		fastSort(result).asc((d) => d.price);
 	}
-
 	console.log('result size > ' + result.length);
+	// TODO remove timestamp from result.. gives no value
 	res.send(result);
 });
 
+// and to be honest can delete as well.. should not get duplicates anymore
 router.get('/1h/check/:count', async (req, res) => {
 	let result = [];
-	const currentHour = priceVolume.getCurrentHourCollection();
-	let currentHourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
-	result = fastSort(currentHourData).asc(d=>d.price);
-	for (let i = 1; i < req.params.count; i++) {
-		const pastHour = priceVolume.getPastHourCollection(i);
-		let hourData = await pastHour.find({}, { _id: 0, __v: 0 }).exec();
-		let newData = [];
-		for (data of hourData) {
-			let found = binarySearch(result, data.price, 0, result.length - 1);
-			if (!isNaN(found)) {
-				let find = [found - 1, found, found + 1];
-				let difSide = true;
-				for (x of find) {
-					if (x >= 0 && x <= result.length - 1) {
-						if (result[x].price == data.price && result[x].side == data.side) {
-							result[x].size = result[x].size + data.size;
-							difSide = false;
-							break;
-						}
+	if (req.params.count > 0) {
+		const currentTime = new Date();
+		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
+		let hoursOver = req.params.count - (currentTime.getHours() + 1);
+		let model = priceVolume.getCurrentDayCollectionModel();
+
+		if (hoursOver <= 0) {
+			// push todays data >= request lastTimestamp
+			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
+			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
+			for (let i = 0; i < req.params.count; i++) {
+				const findStamp = currentTimestamp - i * 60 * 60;
+				const tmpResult = pushDataAndRemove(findStamp, data, result);
+				result = tmpResult.result;
+				data = tmpResult.data;
+			}
+		} else {
+			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+			// push current days data
+			for (let i = 0; i <= currentTime.getHours(); i++) {
+				const findStamp = currentTimestamp - i * 60 * 60;
+				const tmpResult = pushDataAndRemove(findStamp, todaysData, result);
+				result = tmpResult.result;
+				todaysData = tmpResult.data;
+			}
+			let needDays = 0;
+			hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
+			for (let i = 0; i < needDays; i++) {
+				const highTimestamp = model.modelName.split('_')[1];
+				model = priceVolume.getPastDaysCollectionModel(i + 1);
+				if (Math.floor(hoursOver / 24) != 0) {
+					// take the whole days data
+					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+					hoursOver = hoursOver - 24;
+					for (let j = 1; j <= 24; j++) {
+						const findStamp = highTimestamp - j * 60 * 60;
+						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
+						result = tmpResult.result;
+						thatDaysData = tmpResult.data;
+					}
+				} else {
+					// take only few hours
+					const lastTimestamp = highTimestamp - hoursOver * 60 * 60;
+					let thatDaysData = await model
+						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
+						.exec();
+					for (let j = 1; j <= hoursOver; j++) {
+						const findStamp = highTimestamp - j * 60 * 60;
+						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
+						result = tmpResult.result;
+						thatDaysData = tmpResult.data;
 					}
 				}
-				if (difSide) {
-					newData.push(data);
-				}
-			} else {
-				newData.push(data);
 			}
 		}
-		result = result.concat(newData);
-		fastSort(result).asc(d=>d.price);
 	}
 
 	for (let i = 0; i < result.length; i++) {
@@ -91,47 +136,9 @@ router.get('/1h/check/:count', async (req, res) => {
 	            j = > ${result[j]}`);
 			}
 		}
+	
 	}
-
 	console.log('CHECK result size > ' + result.length);
-	res.send(result);
-});
-
-router.get('/real/:count', async (req, res) => {
-	let result = [];
-	const currentHour = priceVolume.getCurrentHourCollection();
-	let currentHourData = await currentHour.find({}, { _id: 0, __v: 0 }).exec();
-	result = currentHourData;
-	for (let i = 1; i < req.params.count; i++) {
-		const pastHour = priceVolume.getPastHourCollection(i);
-		let hourData = await pastHour.find({}, { _id: 0, __v: 0 }).exec();
-		for (data of hourData) {
-			let found = false;
-			for (x of result) {
-				if (data.price == x.price && data.side == x.side) {
-					x.size = x.size + data.size;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				result.push(data);
-			}
-		}
-	}
-	result = currentHourData.sort((a, b) => a.price - b.price);
-	console.log('FIRST result size > ' + result.length);
-	res.send(result);
-});
-
-router.get('/1h/report/:count', async (req, res) => {
-	let result = [];
-	for (let i = 0; i < req.params.count; i++) {
-		const pastHour = priceVolume.getPastHourCollection(i);
-		const hourData = await pastHour.find({}, { _id: 0, __v: 0 }).exec();
-		const timestamp = pastHour.collection.collectionName.split('_')[1];
-		result.push({ timestamp: timestamp, data: hourData });
-	}
 	res.send(result);
 });
 
@@ -144,6 +151,57 @@ function binarySearch(arr, x, start, end) {
 
 	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
 	else return binarySearch(arr, x, mid + 1, end);
+}
+
+function pushDataAndRemove(findStamp, data, result) {
+	let stampData = [];
+	let dataWithout = [];
+	/* TODO
+	data in collection are with sequential timestamps
+	so i can break if timestamp changes and push the rest to dataWithout
+	...
+	or send back result and index where new timestamp starts 
+	...
+	might win some milliseconds
+	*/
+	for (d of data) {
+		if (d.timestamp == findStamp) {
+			stampData.push(d);
+		} else {
+			dataWithout.push(d);
+		}
+	}
+	const res = pushNewData(stampData, result);
+	return { result: res, data: dataWithout };
+	// return result = pushNewData(stampData, result);
+}
+
+function pushNewData(hourData, result) {
+	let newData = [];
+	for (data of hourData) {
+		let found = binarySearch(result, data.price, 0, result.length - 1);
+		if (!isNaN(found)) {
+			let find = [found - 1, found, found + 1];
+			let difSide = true;
+			for (x of find) {
+				if (x >= 0 && x <= result.length - 1) {
+					if (result[x].price == data.price && result[x].side == data.side) {
+						result[x].size = result[x].size + data.size;
+						difSide = false;
+						break;
+					}
+				}
+			}
+			if (difSide) {
+				newData.push(data);
+			}
+		} else {
+			newData.push(data);
+		}
+	}
+	result = result.concat(newData);
+	fastSort(result).asc((d) => d.price);
+	return result;
 }
 
 module.exports = router;
