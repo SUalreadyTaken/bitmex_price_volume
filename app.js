@@ -41,7 +41,7 @@ if (process.env.USE_ALTERNATIVE_APPS) {
 		if (!alternativeBoolean && alternativeBoolean != undefined) request(process.env.HEROKU_URL + 'pricevolume/');
 	}, 240000);
 } else {
-	setInterval(() => bitmexService.requestData(true), 100);
+	setInterval(() => bitmexService.requestData(false), 150);
 	setInterval(() => request(process.env.HEROKU_URL + 'pricevolume/'), 240000);
 }
 
@@ -52,6 +52,9 @@ async function getAlternativeBoolean() {
 	if (!alternativeBoolean) {
 		if (doc.switchTime == undefined) {
 			await AlternativeModel.deleteOne(doc);
+			// FIXME check this shit.. db has timestamp with .0
+			// const t = new Date();
+			// const switchIn = t.setSeconds(0,0) + parseInt(process.env.SWITCH_TIME_MILLIS);
 			const switchIn = Date.now() + parseInt(process.env.SWITCH_TIME_MILLIS);
 			const correctAlternative = new AlternativeModel({
 				alternativeApp: doc.alternativeApp,
@@ -63,6 +66,7 @@ async function getAlternativeBoolean() {
 			}, process.env.SWITCH_TIME_MILLIS);
 		} else {
 			const switchIn = doc.switchTime - Date.now();
+			console.log(`switching to alternative in ${switchIn} milliseconds`);
 			switchIn < 60000
 				? setInterval(() => switchToAlternative(), 60000)
 				: setInterval(() => switchToAlternative(), switchIn);

@@ -3,37 +3,46 @@ const priceVolume = require('../models/priceVolume.js');
 const fastSort = require('fast-sort');
 
 router.get('/', (req, res) => {
-	res.send({time:Date.now()});
+	res.send({ time: Date.now() });
 });
 
 router.get('/1h/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
+		// current day
 		const currentTime = new Date();
 		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
 		let hoursOver = req.params.count - (currentTime.getHours() + 1);
 		let model = priceVolume.getCurrentDayCollectionModel();
-
 		if (hoursOver <= 0) {
 			// push todays data >= request lastTimestamp
 			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
 			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
-			for (let i = 0; i < req.params.count; i++) {
-				const findStamp = currentTimestamp - i * 60 * 60;
-				const tmpResult = pushDataAndRemove(findStamp, data, result);
-				result = tmpResult.result;
-				data = tmpResult.data;
+			if (data.length > 0) {
+				let index = data.length - 1;
+				for (let i = 0; i < req.params.count; i++) {
+					const findStamp = currentTimestamp - i * 60 * 60;
+					const tmpResult = pushDataAndRemoveIndex(findStamp, data, index, result);
+					result = tmpResult.result;
+					index = tmpResult.index;
+				}
 			}
 		} else {
+			// need past days data 
 			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
-			for (let i = 0; i <= currentTime.getHours(); i++) {
-				const findStamp = currentTimestamp - i * 60 * 60;
-				const tmpResult = pushDataAndRemove(findStamp, todaysData, result);
-				result = tmpResult.result;
-				todaysData = tmpResult.data;
+			if (todaysData.length > 0) {
+				let index = todaysData.length - 1;
+				// push current days data
+				for (let i = 0; i <= currentTime.getHours(); i++) {
+					const findStamp = currentTimestamp - i * 60 * 60;
+					const tmpResult = pushDataAndRemoveIndex(findStamp, todaysData, index, result);
+					result = tmpResult.result;
+					index = tmpResult.index;
+				}
 			}
 			let needDays = 0;
 			hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
+			// past days
 			for (let i = 0; i < needDays; i++) {
 				const highTimestamp = model.modelName.split('_')[1];
 				model = priceVolume.getPastDaysCollectionModel(i + 1);
@@ -41,11 +50,14 @@ router.get('/1h/:count', async (req, res) => {
 					// take the whole days data
 					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
 					hoursOver = hoursOver - 24;
-					for (let j = 1; j <= 24; j++) {
-						const findStamp = highTimestamp - j * 60 * 60;
-						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
-						result = tmpResult.result;
-						thatDaysData = tmpResult.data;
+					if (thatDaysData.length > 0) {
+						let index = thatDaysData.length - 1;
+						for (let j = 1; j <= 24; j++) {
+							const findStamp = highTimestamp - j * 60 * 60;
+							const tmpResult = pushDataAndRemoveIndex(findStamp, thatDaysData, index, result);
+							result = tmpResult.result;
+							index = tmpResult.index;
+						}
 					}
 				} else {
 					// take only few hours
@@ -53,18 +65,27 @@ router.get('/1h/:count', async (req, res) => {
 					let thatDaysData = await model
 						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
 						.exec();
-					for (let j = 1; j <= hoursOver; j++) {
-						const findStamp = highTimestamp - j * 60 * 60;
-						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
-						result = tmpResult.result;
-						thatDaysData = tmpResult.data;
+					if (thatDaysData.length > 0) {
+						let index = thatDaysData.length - 1;
+						for (let j = 1; j <= hoursOver; j++) {
+							const findStamp = highTimestamp - j * 60 * 60;
+							const tmpResult = pushDataAndRemoveIndex(findStamp, thatDaysData, index, result);
+							result = tmpResult.result;
+							index = tmpResult.index;
+						}
 					}
 				}
 			}
 		}
 	}
-	console.log('result size > ' + result.length);
-	// TODO remove timestamp from result.. gives no value
+
+	let volume = 0;
+	for(x of result) {
+		volume += x.size;
+	}
+	console.log('total vol > ' + volume);
+
+	console.log('CHECK result size > ' + result.length);
 	res.send(result);
 });
 
@@ -76,25 +97,30 @@ router.get('/1h/check/:count', async (req, res) => {
 		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
 		let hoursOver = req.params.count - (currentTime.getHours() + 1);
 		let model = priceVolume.getCurrentDayCollectionModel();
-
 		if (hoursOver <= 0) {
 			// push todays data >= request lastTimestamp
 			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
 			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
-			for (let i = 0; i < req.params.count; i++) {
-				const findStamp = currentTimestamp - i * 60 * 60;
-				const tmpResult = pushDataAndRemove(findStamp, data, result);
-				result = tmpResult.result;
-				data = tmpResult.data;
+			if (data.length > 0) {
+				let index = data.length - 1;
+				for (let i = 0; i < req.params.count; i++) {
+					const findStamp = currentTimestamp - i * 60 * 60;
+					const tmpResult = pushDataAndRemoveIndex(findStamp, data, index, result);
+					result = tmpResult.result;
+					index = tmpResult.index;
+				}
 			}
 		} else {
 			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
-			// push current days data
-			for (let i = 0; i <= currentTime.getHours(); i++) {
-				const findStamp = currentTimestamp - i * 60 * 60;
-				const tmpResult = pushDataAndRemove(findStamp, todaysData, result);
-				result = tmpResult.result;
-				todaysData = tmpResult.data;
+			if (todaysData.length > 0) {
+				let index = todaysData.length - 1;
+				// push current days data
+				for (let i = 0; i <= currentTime.getHours(); i++) {
+					const findStamp = currentTimestamp - i * 60 * 60;
+					const tmpResult = pushDataAndRemoveIndex(findStamp, todaysData, index, result);
+					result = tmpResult.result;
+					index = tmpResult.index;
+				}
 			}
 			let needDays = 0;
 			hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
@@ -105,11 +131,14 @@ router.get('/1h/check/:count', async (req, res) => {
 					// take the whole days data
 					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
 					hoursOver = hoursOver - 24;
-					for (let j = 1; j <= 24; j++) {
-						const findStamp = highTimestamp - j * 60 * 60;
-						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
-						result = tmpResult.result;
-						thatDaysData = tmpResult.data;
+					if (thatDaysData.length > 0) {
+						let index = thatDaysData.length - 1;
+						for (let j = 1; j <= 24; j++) {
+							const findStamp = highTimestamp - j * 60 * 60;
+							const tmpResult = pushDataAndRemoveIndex(findStamp, thatDaysData, index, result);
+							result = tmpResult.result;
+							index = tmpResult.index;
+						}
 					}
 				} else {
 					// take only few hours
@@ -117,11 +146,14 @@ router.get('/1h/check/:count', async (req, res) => {
 					let thatDaysData = await model
 						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
 						.exec();
-					for (let j = 1; j <= hoursOver; j++) {
-						const findStamp = highTimestamp - j * 60 * 60;
-						const tmpResult = pushDataAndRemove(findStamp, thatDaysData, result);
-						result = tmpResult.result;
-						thatDaysData = tmpResult.data;
+					if (thatDaysData.length > 0) {
+						let index = thatDaysData.length - 1;
+						for (let j = 1; j <= hoursOver; j++) {
+							const findStamp = highTimestamp - j * 60 * 60;
+							const tmpResult = pushDataAndRemoveIndex(findStamp, thatDaysData, index, result);
+							result = tmpResult.result;
+							index = tmpResult.index;
+						}
 					}
 				}
 			}
@@ -136,7 +168,6 @@ router.get('/1h/check/:count', async (req, res) => {
 	            j = > ${result[j]}`);
 			}
 		}
-	
 	}
 	console.log('CHECK result size > ' + result.length);
 	res.send(result);
@@ -153,27 +184,19 @@ function binarySearch(arr, x, start, end) {
 	else return binarySearch(arr, x, mid + 1, end);
 }
 
-function pushDataAndRemove(findStamp, data, result) {
+function pushDataAndRemoveIndex(findStamp, data, index, result) {
 	let stampData = [];
-	let dataWithout = [];
-	/* TODO
-	data in collection are with sequential timestamps
-	so i can break if timestamp changes and push the rest to dataWithout
-	...
-	or send back result and index where new timestamp starts 
-	...
-	might win some milliseconds
-	*/
-	for (d of data) {
-		if (d.timestamp == findStamp) {
-			stampData.push(d);
+	let resIndex = 0;
+	for (let i = index; i >= 0; i--) {
+		if (data[i].timestamp == findStamp) {
+			stampData.push(data[i]);
 		} else {
-			dataWithout.push(d);
+			resIndex = i;
+			break;
 		}
 	}
 	const res = pushNewData(stampData, result);
-	return { result: res, data: dataWithout };
-	// return result = pushNewData(stampData, result);
+	return { result: res, index: resIndex };
 }
 
 function pushNewData(hourData, result) {

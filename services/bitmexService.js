@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const crypto = require('crypto');
 const sleep = require('util').promisify(setTimeout);
 const fastSort = require('fast-sort');
+const mongoose = require('mongoose');
 
 dotenv.config({ path: '../config.env' });
 
@@ -41,7 +42,7 @@ function requestData(boolean) {
 	// main app
 	// if (insertsDone && boolean) getData();
 	// FIXME alternative app
-	if (insertsDone && (!boolean && boolean != undefined)) getData();
+	if (insertsDone && !boolean && boolean != undefined) getData();
 }
 
 function getData() {
@@ -72,7 +73,7 @@ function getData() {
 					let tmp = {
 						price: trade.price,
 						side: trade.side,
-						size: trade.size, 
+						size: trade.size,
 						timestamp: currentTimestamp
 					};
 					tmpTrades.push(tmp);
@@ -121,7 +122,7 @@ function getData() {
 
 				let updateBulk = [];
 				const model = priceVolume.getCurrentDayCollectionModel();
-				let existingPrices = await model.find({timestamp : currentTimestamp}).exec();
+				let existingPrices = await model.find({ timestamp: currentTimestamp }).exec();
 				existingPrices = fastSort(existingPrices).asc((d) => d.price);
 				for (trade of trades) {
 					let found = binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);
@@ -135,8 +136,8 @@ function getData() {
 									difSide = false;
 									updateBulk.push({
 										updateOne: {
-											filter: { price: trade.price, side: trade.side },
-											update: { size: newSize }
+											filter: { _id: mongoose.Types.ObjectId(existingPrices[x].id) },
+											update: { $set: { size: newSize } }
 										}
 									});
 									break;
@@ -169,17 +170,17 @@ function getData() {
 					);
 				}
 			}
+			const needToSleep = 1000 - (new Date() - start);
+			if (needToSleep > 0) {
+				await sleep(needToSleep);
+			}
+			insertsDone = true;
 		} else {
-			// If you are limited, you will receive a 429 response and an additional header, Retry-After,
-			// that indicates the number of seconds you should sleep before retrying.
+			// TODO implement 429 sleep.. haven't gotten 429 in a week
 			console.log(res.headers);
 			console.log('status isnt 200 it is > ' + res.statusCode);
+			insertsDone = true;
 		}
-		const needToSleep = 1000 - (new Date() - start);
-		if (needToSleep > 0) {
-			await sleep(needToSleep);
-		}
-		insertsDone = true;
 	});
 }
 
