@@ -122,7 +122,10 @@ function getData() {
 
 				let updateBulk = [];
 				const model = priceVolume.getCurrentDayCollectionModel();
-				let existingPrices = await model.find({ timestamp: currentTimestamp }).exec();
+				let existingPrices = await model
+					.find({ timestamp: currentTimestamp })
+					.lean()
+					.exec();
 				existingPrices = fastSort(existingPrices).asc((d) => d.price);
 				for (trade of trades) {
 					let found = binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);

@@ -17,7 +17,7 @@ router.get('/1h/:count', async (req, res) => {
 		if (hoursOver <= 0) {
 			// push todays data >= request lastTimestamp
 			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
-			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
+			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).lean().exec();
 			if (data.length > 0) {
 				let index = data.length - 1;
 				for (let i = 0; i < req.params.count; i++) {
@@ -28,8 +28,8 @@ router.get('/1h/:count', async (req, res) => {
 				}
 			}
 		} else {
-			// need past days data 
-			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+			// need past days data
+			let todaysData = await model.find({}, { _id: 0, __v: 0 }).lean().exec();
 			if (todaysData.length > 0) {
 				let index = todaysData.length - 1;
 				// push current days data
@@ -48,7 +48,7 @@ router.get('/1h/:count', async (req, res) => {
 				model = priceVolume.getPastDaysCollectionModel(i + 1);
 				if (Math.floor(hoursOver / 24) != 0) {
 					// take the whole days data
-					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).lean().exec();
 					hoursOver = hoursOver - 24;
 					if (thatDaysData.length > 0) {
 						let index = thatDaysData.length - 1;
@@ -64,6 +64,7 @@ router.get('/1h/:count', async (req, res) => {
 					const lastTimestamp = highTimestamp - hoursOver * 60 * 60;
 					let thatDaysData = await model
 						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
+						.lean()
 						.exec();
 					if (thatDaysData.length > 0) {
 						let index = thatDaysData.length - 1;
@@ -80,8 +81,9 @@ router.get('/1h/:count', async (req, res) => {
 	}
 
 	let volume = 0;
-	for(x of result) {
+	for (x of result) {
 		volume += x.size;
+		delete x.timestamp;
 	}
 	console.log('total vol > ' + volume);
 
@@ -100,7 +102,7 @@ router.get('/1h/check/:count', async (req, res) => {
 		if (hoursOver <= 0) {
 			// push todays data >= request lastTimestamp
 			const lastTimestamp = currentTimestamp - (req.params.count - 1) * 60 * 60;
-			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).exec();
+			let data = await model.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 }).lean().exec();
 			if (data.length > 0) {
 				let index = data.length - 1;
 				for (let i = 0; i < req.params.count; i++) {
@@ -111,7 +113,7 @@ router.get('/1h/check/:count', async (req, res) => {
 				}
 			}
 		} else {
-			let todaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+			let todaysData = await model.find({}, { _id: 0, __v: 0 }).lean().exec();
 			if (todaysData.length > 0) {
 				let index = todaysData.length - 1;
 				// push current days data
@@ -129,7 +131,7 @@ router.get('/1h/check/:count', async (req, res) => {
 				model = priceVolume.getPastDaysCollectionModel(i + 1);
 				if (Math.floor(hoursOver / 24) != 0) {
 					// take the whole days data
-					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).exec();
+					let thatDaysData = await model.find({}, { _id: 0, __v: 0 }).lean().exec();
 					hoursOver = hoursOver - 24;
 					if (thatDaysData.length > 0) {
 						let index = thatDaysData.length - 1;
@@ -145,6 +147,7 @@ router.get('/1h/check/:count', async (req, res) => {
 					const lastTimestamp = highTimestamp - hoursOver * 60 * 60;
 					let thatDaysData = await model
 						.find({ timestamp: { $gte: lastTimestamp } }, { _id: 0, __v: 0 })
+						.lean()
 						.exec();
 					if (thatDaysData.length > 0) {
 						let index = thatDaysData.length - 1;
