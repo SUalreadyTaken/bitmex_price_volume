@@ -124,7 +124,6 @@ function getData() {
 				const model = priceVolume.getCurrentDayCollectionModel();
 				let existingPrices = await model
 					.find({ timestamp: currentTimestamp })
-					.lean()
 					.exec();
 				existingPrices = fastSort(existingPrices).asc((d) => d.price);
 				for (trade of trades) {
