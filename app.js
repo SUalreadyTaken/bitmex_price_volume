@@ -52,9 +52,6 @@ async function getAlternativeBoolean() {
 	if (!alternativeBoolean) {
 		if (doc.switchTime == undefined) {
 			await AlternativeModel.deleteOne(doc);
-			// FIXME check this shit.. db has timestamp with .0
-			// const t = new Date();
-			// const switchIn = t.setSeconds(0,0) + parseInt(process.env.SWITCH_TIME_MILLIS);
 			const switchIn = Date.now() + parseInt(process.env.SWITCH_TIME_MILLIS);
 			const correctAlternative = new AlternativeModel({
 				alternativeApp: doc.alternativeApp,
@@ -79,13 +76,12 @@ async function switchToAlternative() {
 	// FIXME alternative app switch to !alternativeBoolean
 	if (!alternativeBoolean) {
 		let status200 = false;
+		const switchIn = Date.now() + parseInt(process.env.SWITCH_TIME_MILLIS);
 		alternativeBoolean = !alternativeBoolean;
 		await AlternativeModel.findOneAndUpdate(
-			{ alternativeApp: !alternativeBoolean },
-			{ alternativeApp: alternativeBoolean }
+			{ alternativeApp: alternativeBoolean },
+			{ alternativeApp: !alternativeBoolean, switchTime: switchIn }
 		).exec();
-		const switchIn = Date.now() + process.env.SWITCH_TIME_MILLIS;
-		await AlternativeModel.findOneAndUpdate(alternativeBoolean, { switchTime: switchIn }).exec();
 		for (let i = 0; i < 48; i++) {
 			console.error('alternative app still isnt awake');
 			const response = await fetch(process.env.HEROKU_URL_ALTERNATIVE + 'pricevolume/1h/1');
@@ -99,10 +95,10 @@ async function switchToAlternative() {
 		if (!status200) {
 			console.log('failed to switch apps.. continue using this one');
 			alternativeBoolean = !alternativeBoolean;
-			const docFailed = await AlternativeModel.findOne().exec();
-			await AlternativeModel.findOneAndUpdate(docFailed.alternativeApp, {
-				alternativeApp: !docFailed.alternativeApp
-			}).exec();
+			await AlternativeModel.findOneAndUpdate(
+				{ alternativeApp: alternativeBoolean },
+				{ alternativeApp: !alternativeBoolean }
+			).exec();
 		}
 	}
 }
