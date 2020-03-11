@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const sleep = require('util').promisify(setTimeout);
 const fastSort = require('fast-sort');
 const mongoose = require('mongoose');
+const dataUtils = require('../utils/dataUtils.js');
 
 dotenv.config({ path: '../config.env' });
 
@@ -122,12 +123,10 @@ function getData() {
 
 				let updateBulk = [];
 				const model = priceVolume.getCurrentDayCollectionModel();
-				let existingPrices = await model
-					.find({ timestamp: currentTimestamp })
-					.exec();
+				let existingPrices = await model.find({ timestamp: currentTimestamp }).exec();
 				existingPrices = fastSort(existingPrices).asc((d) => d.price);
 				for (trade of trades) {
-					let found = binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);
+					let found = dataUtils.binarySearch(existingPrices, trade.price, 0, existingPrices.length - 1);
 					if (!isNaN(found)) {
 						let find = [found - 1, found, found + 1];
 						let difSide = true;
@@ -186,15 +185,15 @@ function getData() {
 	});
 }
 
-function binarySearch(arr, x, start, end) {
-	if (start > end) return 'nope';
+// function binarySearch(arr, x, start, end) {
+// 	if (start > end) return 'nope';
 
-	let mid = Math.floor((start + end) / 2);
+// 	let mid = Math.floor((start + end) / 2);
 
-	if (arr[mid].price == x) return mid;
+// 	if (arr[mid].price == x) return mid;
 
-	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
-	else return binarySearch(arr, x, mid + 1, end);
-}
+// 	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
+// 	else return binarySearch(arr, x, mid + 1, end);
+// }
 
 module.exports = { requestData };

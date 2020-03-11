@@ -15,19 +15,22 @@ let schema = new mongoose.Schema({
 // };
 
 function getCurrentDayCollectionModel() {
-	const date = new Date();
-	date.setHours(0, 0, 0, 0);
+	const date = new Date().setHours(0, 0, 0, 0);
 	const modelName = 'pv_' + date / 1000;
 
 	return mongoose.modelNames().includes(modelName) ? mongoose.model(modelName) : mongoose.model(modelName, schema);
 }
 
 function getPastDaysCollectionModel(daysPassed) {
-	const date = new Date();
-	date.setHours(0, 0, 0, 0);
+	const date = new Date().setHours(0, 0, 0, 0);
 	const timestamp = date / 1000 - daysPassed * 24 * 60 * 60;
 	const modelName = 'pv_' + timestamp;
 
+	return mongoose.modelNames().includes(modelName) ? mongoose.model(modelName) : mongoose.model(modelName, schema);
+}
+
+function getPastDaysModel(timestamp) {
+	const modelName = 'pv_' + timestamp;
 	return mongoose.modelNames().includes(modelName) ? mongoose.model(modelName) : mongoose.model(modelName, schema);
 }
 
@@ -38,5 +41,6 @@ function getSchema() {
 module.exports = {
 	getCurrentDayCollectionModel,
 	getPastDaysCollectionModel,
+	getPastDaysModel,
 	getSchema
 };
