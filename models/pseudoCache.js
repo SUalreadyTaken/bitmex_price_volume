@@ -13,9 +13,9 @@ class PseudoCache {
 		let result = [];
 		const currentTime = new Date();
 		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
+		const todaysTimestamp = new Date().setHours(0,0,0,0) / 1000;
 		if (this.currentHourTimestamp == currentTimestamp) {
 			//still same hour
-			const todaysTimestamp = new Date().setHours(0,0,0,0) / 1000;
 			for (let i = 0; i < this.cache.length; i++) {
 				if (this.cache[i].timestamp == todaysTimestamp) {
 					found = true;
@@ -63,7 +63,7 @@ class PseudoCache {
 					.lean()
 					.exec();
 				for (let i = 0; i < this.cache.length; i++) {
-					if (this.cache[i].timestamp == this.currentHourTimestamp) {
+					if (this.cache[i].timestamp == todaysTimestamp) {
 						this.cache[i].data = todaysDataExCurrentHour;
 					}
 				}
@@ -109,15 +109,15 @@ class PseudoCache {
 }
 
 async function updateYesterdaysData() {
-	const yesterdaysData = await priceVolume
-		.getPastDaysCollectionModel(1)
+	const model = priceVolume.getPastDaysCollectionModel(1);
+	const yesterdaysData = await model
 		.find({}, { _id: 0, __v: 0 })
 		.lean()
 		.exec();
 	// timestamp has to be there
-	const todaysTimestamp = new Date().setHours(0,0,0,0) / 1000;
+	const yesterdaysTimestamp = model.modelName.split('_')[1];
 	for (let i = 0; i < this.cache.length; i++) {
-		if (this.cache[i].timestamp == todaysTimestamp) {
+		if (this.cache[i].timestamp == yesterdaysTimestamp) {
 			this.cache[i].data = yesterdaysData;
 			break;
 		}
