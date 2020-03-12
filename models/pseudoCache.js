@@ -13,7 +13,7 @@ class PseudoCache {
 		let result = [];
 		const currentTime = new Date();
 		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
-		const todaysTimestamp = new Date().setHours(0,0,0,0) / 1000;
+		const todaysTimestamp = new Date().setHours(0, 0, 0, 0) / 1000;
 		if (this.currentHourTimestamp == currentTimestamp) {
 			//still same hour
 			for (let i = 0; i < this.cache.length; i++) {
@@ -28,9 +28,9 @@ class PseudoCache {
 				console.log('1st query');
 				const model = priceVolume.getCurrentDayCollectionModel();
 				const todaysDataExCurrentHour = await model
-				.find({ timestamp: { $lt: this.currentHourTimestamp } }, { _id: 0, __v: 0 })
-				.lean()
-				.exec();
+					.find({ timestamp: { $lt: this.currentHourTimestamp } }, { _id: 0, __v: 0 })
+					.lean()
+					.exec();
 				this.cache.push({ timestamp: model.modelName.split('_')[1], data: todaysDataExCurrentHour });
 				result = todaysDataExCurrentHour;
 			}
@@ -41,7 +41,19 @@ class PseudoCache {
 				console.log('day has changed.. ' + currentTime);
 				// day has changed
 				// should be 00:xx new day.. heroku's ping will update todays cache constantly
-				await updateYesterdaysData();
+				const model = priceVolume.getPastDaysCollectionModel(1);
+				const yesterdaysData = await model
+					.find({}, { _id: 0, __v: 0 })
+					.lean()
+					.exec();
+				// timestamp has to be there
+				const yesterdaysTimestamp = model.modelName.split('_')[1];
+				for (let i = 0; i < this.cache.length; i++) {
+					if (this.cache[i].timestamp == yesterdaysTimestamp) {
+						this.cache[i].data = yesterdaysData;
+						break;
+					}
+				}
 				// if 00:xx return empty result
 				if (today.getHours() != 0) {
 					// should never reach here
@@ -105,22 +117,6 @@ class PseudoCache {
 
 	getCache() {
 		return this.cache;
-	}
-}
-
-async function updateYesterdaysData() {
-	const model = priceVolume.getPastDaysCollectionModel(1);
-	const yesterdaysData = await model
-		.find({}, { _id: 0, __v: 0 })
-		.lean()
-		.exec();
-	// timestamp has to be there
-	const yesterdaysTimestamp = model.modelName.split('_')[1];
-	for (let i = 0; i < this.cache.length; i++) {
-		if (this.cache[i].timestamp == yesterdaysTimestamp) {
-			this.cache[i].data = yesterdaysData;
-			break;
-		}
 	}
 }
 
