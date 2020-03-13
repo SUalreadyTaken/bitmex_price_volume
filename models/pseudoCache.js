@@ -55,7 +55,7 @@ class PseudoCache {
 					}
 				}
 				// if 00:xx return empty result
-				if (today.getHours() != 0) {
+				if (currentTime.getHours() != 0) {
 					// should never reach here
 					const model = priceVolume.getCurrentDayCollectionModel();
 					const todaysDataExCurrentHour = await model
