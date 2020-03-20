@@ -20,6 +20,7 @@ async function getData(reqParam) {
 			.exec();
 		fastSort(result).asc((d) => d.price);
 		if (reqParam != 1) {
+			// xx:59:59 can get wrong data
 			let data = await pseudoCache.getTodaysCache();
 			if (data.length > 0) {
 				let index = data.length - 1;
@@ -157,4 +158,8 @@ function updateTodaysCache() {
 	pseudoCache.getTodaysCache();
 }
 
-module.exports = { getData, binarySearch, updateTodaysCache};
+function putPastDayToCache(daysPassed) {
+	pseudoCache.getDay(daysPassed);
+}
+
+module.exports = { getData, binarySearch, updateTodaysCache, putPastDayToCache};

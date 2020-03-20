@@ -1,9 +1,14 @@
 const router = require('express').Router();
 const dataUtil = require('../utils/dataUtils.js')
 
+let cacheDaysPassed = 1;
+
 router.get('/', (req, res) => {
-	// TODO get todaysData from cache..
 	dataUtil.updateTodaysCache();
+	if (cacheDaysPassed < 30) {
+		dataUtil.putPastDayToCache(cacheDaysPassed);
+		cacheDaysPassed++;
+	}
 	res.send({ time: Date.now() });
 });
 

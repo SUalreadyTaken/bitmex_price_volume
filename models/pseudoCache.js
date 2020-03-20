@@ -103,6 +103,7 @@ class PseudoCache {
 		}
 
 		if (!found) {
+			console.log(timestamp + ' collection not in cache.. fetch,push,return');
 			const pastDaysCollection = await priceVolume
 				.getPastDaysModel(timestamp)
 				.find({}, { _id: 0, __v: 0 })
