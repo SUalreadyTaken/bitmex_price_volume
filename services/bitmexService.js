@@ -64,7 +64,8 @@ function getData() {
 		}
 
 		if (res.statusCode == 200) {
-			try {
+			if (isJSON(body)) {
+				
 				let json = JSON.parse(body);
 
 				let tmpTrades = [];
@@ -180,8 +181,6 @@ function getData() {
 					await sleep(needToSleep);
 				}
 				insertsDone = true;
-			} catch (err) {
-				console.log(err);
 			}
 		} else {
 			// TODO implement 429 sleep.. haven't gotten 429 in a week
@@ -192,15 +191,12 @@ function getData() {
 	});
 }
 
-// function binarySearch(arr, x, start, end) {
-// 	if (start > end) return 'nope';
-
-// 	let mid = Math.floor((start + end) / 2);
-
-// 	if (arr[mid].price == x) return mid;
-
-// 	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
-// 	else return binarySearch(arr, x, mid + 1, end);
-// }
+function isJSON(str) {
+    try {
+        return (JSON.parse(str) && !!str);
+    } catch (e) {
+        return false;
+    }
+}
 
 module.exports = { requestData };
