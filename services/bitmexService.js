@@ -197,7 +197,9 @@ function isJSON(str) {
     try {
         return (JSON.parse(str) && !!str);
     } catch (e) {
-        return false;
+		console.log('parse ERROR');
+		console.log(e);
+		return false;
     }
 }
 
