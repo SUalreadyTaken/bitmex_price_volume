@@ -181,6 +181,8 @@ function getData() {
 					await sleep(needToSleep);
 				}
 				insertsDone = true;
+			} else {
+				insertsDone = true;
 			}
 		} else {
 			// TODO implement 429 sleep.. haven't gotten 429 in a week
