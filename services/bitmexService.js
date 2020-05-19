@@ -188,6 +188,10 @@ function getData() {
 			// TODO implement 429 sleep.. haven't gotten 429 in a week
 			console.log(res.headers);
 			console.log('status isnt 200 it is > ' + res.statusCode);
+			const needToSleep = 1000 - (new Date() - start);
+				if (needToSleep > 0) {
+					await sleep(needToSleep);
+				}
 			insertsDone = true;
 		}
 	});
