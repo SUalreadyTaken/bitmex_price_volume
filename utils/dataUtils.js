@@ -19,13 +19,13 @@ async function getData(reqParam) {
 		if (reqParam != 1) {
 			// xx:59:59 can get wrong data
 			let data = await pseudoCache.getTodaysCache();
-			if (data.length > 0) result = pushPriceData(data, currentTimestamp, reqParam - 1, result);
+			if (data.length > 0) result = mergeWithDaysData(data, currentTimestamp, reqParam - 1, result);
 		}
 	} else {
 		// need past days data
 		// todays data
 		let data = await pseudoCache.getTodaysCache();
-		if (data.length > 0) result = pushPriceData(data, currentTimestamp, currentTime.getHours(), result);
+		if (data.length > 0) result = mergeWithDaysData(data, currentTimestamp, currentTime.getHours(), result);
 
 		let needDays = 0;
 		hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
@@ -36,11 +36,11 @@ async function getData(reqParam) {
 				let data = await pseudoCache.getDay(i + 1);
 				hoursOver = hoursOver - 24;
 				// take the whole days data
-				if (data.length > 0) result = pushPriceData(data, highTimestamp, 24, result);
+				if (data.length > 0) result = mergeWithDaysData(data, highTimestamp, 24, result);
 			} else {
 				let data = await pseudoCache.getDay(i + 1);
 				// take only few hours
-				if (data.length > 0) result = pushPriceData(data, highTimestamp, hoursOver, result);
+				if (data.length > 0) result = mergeWithDaysData(data, highTimestamp, hoursOver, result);
 			}
 			const date = new Date().setHours(0, 0, 0, 0);
 			highTimestamp = date / 1000 - (i + 1) * 24 * 60 * 60;
@@ -57,27 +57,19 @@ async function getSellAndBuy(reqParam) {
 	let hoursOver = reqParam - (currentTime.getHours() + 1);
 	let model = priceVolume.getCurrentDayCollectionModel();
 
-	currentHour = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
-	const sellTotal = currentHour
-		.filter((e) => e.side == 'Sell')
-		.map((e) => e.size)
-		.reduce((total, e) => e + total);
-	const buyTotal = currentHour
-		.filter((e) => e.side == 'Buy')
-		.map((e) => e.size)
-		.reduce((total, e) => e + total);
-	result.push({ timestamp: currentTimestamp, totals: [{ sell: sellTotal }, { buy: buyTotal }] });
+	currentHourData = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
+	result.push(buildSellAndBuy(currentTimestamp, currentHourData));
 
 	if (hoursOver <= 0) {
 		if (reqParam != 1) {
 			// xx:59:59 can get wrong data
 			let data = await pseudoCache.getTodaysCache();
-			if (data.length > 0) pushSellAndBuy(data, currentTimestamp, reqParam - 1, result);
+			if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, reqParam - 1, result);
 		}
 	} else {
 		// need past days data
 		let data = await pseudoCache.getTodaysCache();
-		if (data.length > 0) pushSellAndBuy(data, currentTimestamp, currentTime.getHours(), result);
+		if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, currentTime.getHours(), result);
 		let needDays = 0;
 		hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
 		// past days
@@ -87,11 +79,11 @@ async function getSellAndBuy(reqParam) {
 				hoursOver = hoursOver - 24;
 				let data = await pseudoCache.getDay(i + 1);
 				// take the whole days data
-				if (data.length > 0) pushSellAndBuy(data, startingTimestamp, 24, result);
+				if (data.length > 0) sellAndBuyToResult(data, startingTimestamp, 24, result);
 			} else {
 				let data = await pseudoCache.getDay(i + 1);
 				// take only few hours
-				if (data.length > 0) pushSellAndBuy(data, startingTimestamp, hoursOver, result);
+				if (data.length > 0) sellAndBuyToResult(data, startingTimestamp, hoursOver, result);
 			}
 			const date = new Date().setHours(0, 0, 0, 0);
 			startingTimestamp = date / 1000 - (i + 1) * 24 * 60 * 60;
@@ -100,34 +92,24 @@ async function getSellAndBuy(reqParam) {
 	return result;
 }
 
-function pushPriceData(data, currentTimestamp, hourCount, result) {
+function mergeWithDaysData(data, currentTimestamp, hourCount, result) {
 	let index = data.length - 1;
 	for (let i = 1; i <= hourCount; i++) {
 		const findStamp = currentTimestamp - i * 60 * 60;
-		// const tmpResult = pushDataAndRemoveIndex(findStamp, data, index, result);
 		const tmpResult = getTimestampDataAndNextIndex(findStamp, data, index, result);
 		index = tmpResult.index;
-		// result = tmpResult.result;
-		result = pushNewData(tmpResult.result, result);
+		result = mergeWithNewData(tmpResult.result, result);
 	}
 	return result;
 }
 
-function pushSellAndBuy(data, startingTimestamp, hourCount, result) {
+function sellAndBuyToResult(data, startingTimestamp, hourCount, result) {
 	let index = data.length - 1;
 	for (let j = 1; j <= hourCount; j++) {
 		const findStamp = startingTimestamp - j * 60 * 60;
 		const tmpResult = getTimestampDataAndNextIndex(findStamp, data, index);
 		index = tmpResult.index;
-		const sellTotal = tmpResult.result
-			.filter((e) => e.side == 'Sell')
-			.map((e) => e.size)
-			.reduce((total = 0, e) => e + total, 0);
-		const buyTotal = tmpResult.result
-			.filter((e) => e.side == 'Buy')
-			.map((e) => e.size)
-			.reduce((total = 0, e) => e + total, 0);
-		result.push({ timestamp: findStamp, totals: [{ sell: sellTotal }, { buy: buyTotal }] });
+		result.push(buildSellAndBuy(findStamp, tmpResult.result));
 	}
 }
 
@@ -145,18 +127,19 @@ function getTimestampDataAndNextIndex(findStamp, data, index) {
 	return { result, index: resIndex };
 }
 
-function binarySearch(arr, x, start, end) {
-	if (start > end) return 'nope';
-
-	let mid = Math.floor((start + end) / 2);
-
-	if (arr[mid].price == x) return mid;
-
-	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
-	else return binarySearch(arr, x, mid + 1, end);
+function buildSellAndBuy(currentTimestamp, data) {
+	const sellTotal = data
+		.filter((e) => e.side == 'Sell')
+		.map((e) => e.size)
+		.reduce((total, e) => e + total);
+	const buyTotal = data
+		.filter((e) => e.side == 'Buy')
+		.map((e) => e.size)
+		.reduce((total, e) => e + total);
+	return { timestamp: currentTimestamp, sell: sellTotal, buy: buyTotal };
 }
 
-function pushNewData(hourData, result) {
+function mergeWithNewData(hourData, result) {
 	let newData = [];
 	for (data of hourData) {
 		let found = binarySearch(result, data.price, 0, result.length - 1);
@@ -194,6 +177,17 @@ function pushNewData(hourData, result) {
 	result = result.concat(newData);
 	fastSort(result).asc((d) => d.price);
 	return result;
+}
+
+function binarySearch(arr, x, start, end) {
+	if (start > end) return 'nope';
+
+	let mid = Math.floor((start + end) / 2);
+
+	if (arr[mid].price == x) return mid;
+
+	if (arr[mid].price > x) return binarySearch(arr, x, start, mid - 1);
+	else return binarySearch(arr, x, mid + 1, end);
 }
 
 function updateTodaysCache() {
