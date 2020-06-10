@@ -9,7 +9,7 @@ class PseudoCache {
 
 	// get todays data excluding current hour
 	async getTodaysCache() {
-		let found = false;
+		// let found = false;
 		let result = [];
 		const currentTime = new Date();
 		const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
@@ -17,23 +17,19 @@ class PseudoCache {
 		if (this.currentHourTimestamp == currentTimestamp) {
 			//still same hour
 			for (let i = 0; i < this.cache.length; i++) {
-				if (this.cache[i].timestamp == todaysTimestamp) {
-					found = true;
-					result = this.cache[i].data;
-					break;
-				}
+				if (this.cache[i].timestamp == todaysTimestamp) return this.cache[i].data;
 			}
 			// 1st query..
-			if (!found) {
-				console.log('1st query');
-				const model = priceVolume.getCurrentDayCollectionModel();
-				const todaysDataExCurrentHour = await model
-					.find({ timestamp: { $lt: this.currentHourTimestamp } }, { _id: 0, __v: 0 })
-					.lean()
-					.exec();
-				this.cache.push({ timestamp: model.modelName.split('_')[1], data: todaysDataExCurrentHour });
-				result = todaysDataExCurrentHour;
-			}
+			// if (!found) {
+			console.log('1st query');
+			const model = priceVolume.getCurrentDayCollectionModel();
+			const todaysDataExCurrentHour = await model
+				.find({ timestamp: { $lt: this.currentHourTimestamp } }, { _id: 0, __v: 0 })
+				.lean()
+				.exec();
+			this.cache.push({ timestamp: model.modelName.split('_')[1], data: todaysDataExCurrentHour });
+			result = todaysDataExCurrentHour;
+			// }
 		} else {
 			// check if day has changed
 			const cacheTimestampDay = new Date(this.currentHourTimestamp * 1000).getDay();
@@ -42,18 +38,10 @@ class PseudoCache {
 				// day has changed
 				// should be 00:xx new day.. heroku's ping will update todays cache constantly
 				const model = priceVolume.getPastDaysCollectionModel(1);
-				const yesterdaysData = await model
-					.find({}, { _id: 0, __v: 0 })
-					.lean()
-					.exec();
+				const yesterdaysData = await model.find({}, { _id: 0, __v: 0 }).lean().exec();
 				// timestamp has to be there
 				const yesterdaysTimestamp = model.modelName.split('_')[1];
-				for (let i = 0; i < this.cache.length; i++) {
-					if (this.cache[i].timestamp == yesterdaysTimestamp) {
-						this.cache[i].data = yesterdaysData;
-						break;
-					}
-				}
+				this.updateTimestampCacheData(yesterdaysTimestamp, yesterdaysData);
 				// if 00:xx return empty result
 				if (currentTime.getHours() != 0) {
 					// should never reach here
@@ -74,11 +62,7 @@ class PseudoCache {
 					.find({ timestamp: { $lt: currentTimestamp } }, { _id: 0, __v: 0 })
 					.lean()
 					.exec();
-				for (let i = 0; i < this.cache.length; i++) {
-					if (this.cache[i].timestamp == todaysTimestamp) {
-						this.cache[i].data = todaysDataExCurrentHour;
-					}
-				}
+				this.updateTimestampCacheData(todaysTimestamp, todaysDataExCurrentHour);
 				this.currentHourTimestamp = currentTimestamp;
 				result = todaysDataExCurrentHour;
 			}
@@ -88,36 +72,34 @@ class PseudoCache {
 	}
 
 	async getDay(daysPassed) {
-		let found = false;
+		// let found = false;
 		let result = [];
 
 		const date = new Date().setHours(0, 0, 0, 0);
 		const timestamp = date / 1000 - daysPassed * 24 * 60 * 60;
 
 		for (let i = 0; i < this.cache.length; i++) {
-			if (this.cache[i].timestamp == timestamp) {
-				found = true;
-				result = this.cache[i].data;
-				break;
-			}
+			if (this.cache[i].timestamp == timestamp) return this.cache[i].data;
 		}
 
-		if (!found) {
-			console.log(timestamp + ' collection not in cache.. fetch,push,return');
-			const pastDaysCollection = await priceVolume
-				.getPastDaysModel(timestamp)
-				.find({}, { _id: 0, __v: 0 })
-				.lean()
-				.exec();
-			this.cache.push({ timestamp: timestamp, data: pastDaysCollection });
-			result = pastDaysCollection;
-		}
+		console.log(timestamp + ' collection not in cache.. fetch,push,return');
+		const pastDaysCollection = await priceVolume
+			.getPastDaysModel(timestamp)
+			.find({}, { _id: 0, __v: 0 })
+			.lean()
+			.exec();
+		this.cache.push({ timestamp: timestamp, data: pastDaysCollection });
+		result = pastDaysCollection;
 
 		return result;
 	}
 
-	getCache() {
-		return this.cache;
+	updateTimestampCacheData(todaysTimestamp, todaysDataExCurrentHour) {
+		for (let i = 0; i < this.cache.length; i++) {
+			if (this.cache[i].timestamp == todaysTimestamp) {
+				this.cache[i].data = todaysDataExCurrentHour;
+			}
+		}
 	}
 }
 

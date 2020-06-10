@@ -15,7 +15,7 @@ router.get('/', (req, res) => {
 router.get('/1h/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
-		result = await dataUtil.getData(req.params.count)
+		result = await dataUtil.getData(req.params.count);
 		let volume = 0;
 		for (x of result) {
 			volume += x.size;
@@ -32,7 +32,7 @@ router.get('/1h/:count', async (req, res) => {
 router.get('/1h/check/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
-		result = await dataUtil.getData(req.params.count)
+		result = await dataUtil.getData(req.params.count);
 		let volume = 0;
 		for (x of result) {
 			volume += x.size;
@@ -50,6 +50,11 @@ router.get('/1h/check/:count', async (req, res) => {
 		console.log('CHECK result size > ' + result.length);
 	}
 
+	res.send(result);
+});
+
+router.get('/1h/sellandbuy/:count', async (req, res) => {
+	result = req.params.count > 0 ? await dataUtil.getSellAndBuy(req.params.count) : [];
 	res.send(result);
 });
 
