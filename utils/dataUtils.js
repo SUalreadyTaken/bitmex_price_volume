@@ -4,27 +4,33 @@ const PseudoCache = require('../models/pseudoCache.js');
 
 const pseudoCache = new PseudoCache();
 
-async function getData(reqParam) {
+/**
+ * Get past hours data
+ * @param {number} reqHours How many hours to look back (current hour = 1)
+ * @returns asc sorted price data
+ */
+async function getData(reqHours) {
 	let result = [];
 	// current day
 	const currentTime = new Date();
 	const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
-	let hoursOver = reqParam - (currentTime.getHours() + 1);
+	let hoursOver = reqHours - (currentTime.getHours() + 1);
 	let model = priceVolume.getCurrentDayCollectionModel();
 
-	result = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
+	result = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0, timestamp: 0 }).lean().exec();
 	fastSort(result).asc((d) => d.price);
 
 	if (hoursOver <= 0) {
-		if (reqParam != 1) {
+		// need only this days data
+		if (reqHours != 1) {
 			// xx:59:59 can get wrong data
 			let data = await pseudoCache.getTodaysCache();
-			if (data.length > 0) result = mergeWithDaysData(data, currentTimestamp, reqParam - 1, result);
+			if (data.length > 0) result = mergeWithDaysData(data, currentTimestamp, reqHours - 1, result);
 		}
 	} else {
-		// need past days data
-		// todays data
+		// also need past days data
 		let data = await pseudoCache.getTodaysCache();
+		// take todays data
 		if (data.length > 0) result = mergeWithDaysData(data, currentTimestamp, currentTime.getHours(), result);
 
 		let needDays = 0;
@@ -35,7 +41,7 @@ async function getData(reqParam) {
 			if (Math.floor(hoursOver / 24) != 0) {
 				let data = await pseudoCache.getDay(i + 1);
 				hoursOver = hoursOver - 24;
-				// take the whole days data
+				// take 24 hours
 				if (data.length > 0) result = mergeWithDaysData(data, highTimestamp, 24, result);
 			} else {
 				let data = await pseudoCache.getDay(i + 1);
@@ -46,29 +52,62 @@ async function getData(reqParam) {
 			highTimestamp = date / 1000 - (i + 1) * 24 * 60 * 60;
 		}
 	}
+
 	return result;
 }
 
-async function getSellAndBuy(reqParam) {
+/**
+ * Merges same price datas
+ * @example
+ * let input = [{ "price": 100, "side": "Sell", "size": 25 }, { "price": 100, "side": "Buy", "size": 25}];
+ * let output = [{ "price": 100, data: [{ "side": "Sell", "size": 25 }, { "side": "Buy", "size": 25 }] }];
+ * @param {*} input
+ * @returns {*} output
+ */
+function mergeSamePriceData(input) {
+	if (input.length > 0) {
+		let output = [];
+		output.push({ price: input[0].price, data: [{ side: input[0].side, size: input[0].size }] });
+		let tmpIndex = 0;
+		for (let i = 1; i < input.length; i++) {
+			if (output[tmpIndex].price == input[i].price) {
+				output[tmpIndex].data.push({ side: input[i].side, size: input[i].size });
+			} else {
+				output.push({ price: input[i].price, data: [{ side: input[i].side, size: input[i].size }] });
+				tmpIndex++;
+			}
+		}
+		return output;
+	}
+	return input;
+}
+
+/**
+ * Get past hours sell and buy total volume
+ * @param {*} reqHours
+ */
+async function getSellAndBuy(reqHours) {
 	let result = [];
 	// current day
 	const currentTime = new Date();
 	const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
-	let hoursOver = reqParam - (currentTime.getHours() + 1);
+	let hoursOver = reqHours - (currentTime.getHours() + 1);
 	let model = priceVolume.getCurrentDayCollectionModel();
 
 	currentHourData = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
 	result.push(buildSellAndBuy(currentTimestamp, currentHourData));
 
 	if (hoursOver <= 0) {
-		if (reqParam != 1) {
+		// need only this days data
+		if (reqHours != 1) {
 			// xx:59:59 can get wrong data
 			let data = await pseudoCache.getTodaysCache();
-			if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, reqParam - 1, result);
+			if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, reqHours - 1, result);
 		}
 	} else {
-		// need past days data
+		// also need past days data
 		let data = await pseudoCache.getTodaysCache();
+		// take todays data
 		if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, currentTime.getHours(), result);
 		let needDays = 0;
 		hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
@@ -131,11 +170,11 @@ function buildSellAndBuy(currentTimestamp, data) {
 	const sellTotal = data
 		.filter((e) => e.side == 'Sell')
 		.map((e) => e.size)
-		.reduce((total, e) => e + total);
+		.reduce((total, e) => e + total, 0);
 	const buyTotal = data
 		.filter((e) => e.side == 'Buy')
 		.map((e) => e.size)
-		.reduce((total, e) => e + total);
+		.reduce((total, e) => e + total, 0);
 	return { timestamp: currentTimestamp, sell: sellTotal, buy: buyTotal };
 }
 
@@ -160,7 +199,7 @@ function mergeWithNewData(hourData, result) {
 					price: data.price,
 					side: data.side,
 					size: data.size,
-					timestamp: data.timestamp,
+					// timestamp: data.timestamp,
 				};
 				newData.push(d);
 			}
@@ -169,7 +208,7 @@ function mergeWithNewData(hourData, result) {
 				price: data.price,
 				side: data.side,
 				size: data.size,
-				timestamp: data.timestamp,
+				// timestamp: data.timestamp,
 			};
 			newData.push(d);
 		}
@@ -198,4 +237,4 @@ function putPastDayToCache(daysPassed) {
 	pseudoCache.getDay(daysPassed);
 }
 
-module.exports = { getData, binarySearch, updateTodaysCache, putPastDayToCache, getSellAndBuy };
+module.exports = { getData, binarySearch, updateTodaysCache, putPastDayToCache, getSellAndBuy, mergeSamePriceData };
