@@ -175,7 +175,7 @@ function mergeWithNewData(hourData, result) {
 		}
 	}
 	result = result.concat(newData);
-	fastSort(result).asc((d) => d.price);
+	if (newData.length > 0) fastSort(result).asc((d) => d.price);
 	return result;
 }
 
