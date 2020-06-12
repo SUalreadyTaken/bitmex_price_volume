@@ -12,7 +12,7 @@ router.get('/', (req, res) => {
 	res.send({ time: Date.now() });
 });
 
-router.get('/1h/:count', async (req, res) => {
+router.get('/1h/seperated/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
 		result = await dataUtil.getPricesSeparately(req.params.count);
@@ -24,10 +24,10 @@ router.get('/1h/:count', async (req, res) => {
 });
 
 // and to be honest can delete as well.. should not get duplicates anymore
-router.get('/1h/check/:count', async (req, res) => {
+router.get('/1h/seperated/:count/check', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
-		result = await dataUtil.getData(req.params.count);
+		result = await dataUtil.getPricesSeparately(req.params.count);
 		const volume = result.reduce((total, e) => total + e.size, 0);
 		for (let i = 0; i < result.length; i++) {
 			for (let j = i + 1; j < result.length - 1; j++) {
@@ -44,7 +44,7 @@ router.get('/1h/check/:count', async (req, res) => {
 	res.send(result);
 });
 
-router.get('/1h/:count/transformed', async (req, res) => {
+router.get('/1h/merged/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
 		result = await dataUtil.getPricesMerged(req.params.count);

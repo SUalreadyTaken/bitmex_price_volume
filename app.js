@@ -84,7 +84,7 @@ async function switchToAlternative() {
 		).exec();
 		for (let i = 0; i < 48; i++) {
 			console.error('alternative app still isnt awake');
-			const response = await fetch(process.env.HEROKU_URL_ALTERNATIVE + 'pricevolume/1h/1');
+			const response = await fetch(process.env.HEROKU_URL_ALTERNATIVE + 'pricevolume/1h/seperated/1');
 			if (response.ok) {
 				status200 = !status200;
 				console.log('alternative app is awake');
