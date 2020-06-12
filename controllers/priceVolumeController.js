@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const dataUtil = require('../utils/dataUtils.js')
+const dataUtil = require('../utils/dataUtils.js');
 
 let cacheDaysPassed = 1;
 
@@ -15,10 +15,11 @@ router.get('/', (req, res) => {
 router.get('/1h/:count', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
-		result = await dataUtil.getData(req.params.count)
+		result = await dataUtil.getPricesSeparately(req.params.count);
 		const volume = result.reduce((total, e) => total + e.size, 0);
 		console.log('result size > ' + result.length + ' vol > ' + volume);
 	}
+
 	res.send(result);
 });
 
@@ -46,19 +47,10 @@ router.get('/1h/check/:count', async (req, res) => {
 router.get('/1h/:count/transformed', async (req, res) => {
 	let result = [];
 	if (req.params.count > 0) {
-		result = await dataUtil.getData(req.params.count);
-		result = dataUtil.mergeSamePriceData(result);
-		let volume = 0;
-		for (x of result) {
-			for (y of x.data) {
-				volume += y.size;
-			}
-		}
-		
+		result = await dataUtil.getPricesMerged(req.params.count);
+		const volume = result.reduce((total, e) => Object.values(e.data).reduce((r, o) => r + o, 0) + total, 0);
 		console.log('CHECK result size > ' + result.length + ' vol > ' + volume);
 	}
-
-
 	res.send(result);
 });
 
