@@ -199,22 +199,23 @@ function dataToMap(data, resultMap) {
 	if (data.length > 0) {
 		for (x of data) {
 			const tmp = resultMap.get(x.price);
-			const lowerCaseSide = lowercaseFirst(x.side);
+			// const lowerCaseSide = x.side;
 			if (tmp !== undefined) {
-				if (tmp.data.hasOwnProperty(lowerCaseSide)) {
-					tmp.data[lowerCaseSide] += x.size;
+				if (tmp.data[x.side]) {
+					tmp.data[x.side] += x.size;
 				} else {
-					tmp.data[lowerCaseSide] = x.size;
+					tmp.data[x.side] = x.size;
 				}
 			} else {
-				resultMap.set(x.price, { price: x.price, data: { [lowerCaseSide]: x.size } });
+				resultMap.set(x.price, { price: x.price, data: { [x.side]: x.size } });
 			}
 		}
 	}
 }
 
-// const lowercaseFirst = (s) => typeof s === 'string' ? s.charAt(0).toLowerCase() + s.slice(1) : '';
-const lowercaseFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+// should be always string anyway
+// const lowercaseFirst = (s) => typeof s === 'string' ? s.charAt(0).toLowerCase() + s.slice(1) : 'error';
+// const lowercaseFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
 function getStartIndex(currentTimestamp, hourCount, data) {
 	const lastTimestamp = currentTimestamp - hourCount * 60 * 60;
@@ -283,7 +284,7 @@ function mergeWithNewData(hourData, result) {
 			let find = [found - 1, found, found + 1];
 			let difSide = true;
 			for (x of find) {
-				if (x >= 0 && x <= result.length - 1) {
+				if (x >= 0 && x < result.length) {
 					if (result[x].price == data.price && result[x].side == data.side) {
 						result[x].size = result[x].size + data.size;
 						difSide = false;
