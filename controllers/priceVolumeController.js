@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const dataUtil = require('../utils/dataUtils.js');
+const dataUtil = require(`${__dirname}/../utils/dataUtils.js`);
 
 let cacheDaysPassed = 1;
 
@@ -55,7 +55,7 @@ router.get('/1h/merged/:count', async (req, res) => {
 });
 
 router.get('/1h/sellandbuy/:count', async (req, res) => {
-	result = req.params.count > 0 ? await dataUtil.getSellAndBuy(req.params.count) : [];
+	const result = req.params.count > 0 ? await dataUtil.getSellAndBuy(req.params.count) : [];
 	res.send(result);
 });
 

@@ -6,9 +6,9 @@ const request = require('request');
 const sleep = require('util').promisify(setTimeout);
 const fetch = require('node-fetch');
 
-const bitmexService = require('./services/bitmexService.js');
-const { AlternativeModel } = require('./models/alternative.js');
-const priceVolumeController = require('./controllers/priceVolumeController.js');
+const bitmexService = require(`${__dirname}/services/bitmexService.js`);
+const { AlternativeModel } = require(`${__dirname}/models/alternative.js`);
+const priceVolumeController = require(`${__dirname}/controllers/priceVolumeController.js`);
 
 const app = express();
 
@@ -26,7 +26,7 @@ const limiter = rateLimit({
 	message: 'Too many requests from this IP, please try again in a minute!'
 });
 
-app.use('/api', limiter);
+app.use(limiter);
 app.use('/pricevolume', priceVolumeController);
 let alternativeBoolean = undefined;
 

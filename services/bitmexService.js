@@ -1,13 +1,13 @@
 const request = require('request');
-const priceVolume = require('../models/priceVolume.js');
+const priceVolume = require(`${__dirname}/../models/priceVolume.js`);
 const dotenv = require('dotenv');
 const crypto = require('crypto');
 const sleep = require('util').promisify(setTimeout);
 const fastSort = require('fast-sort');
 const mongoose = require('mongoose');
-const dataUtils = require('../utils/dataUtils.js');
+const dataUtils = require(`${__dirname}/../utils/dataUtils.js`);
 
-dotenv.config({ path: '../config.env' });
+dotenv.config({ path: `${__dirname}/../config.env` });
 
 let lastTradeId;
 let lastTimestamp;
@@ -49,65 +49,69 @@ function requestData(boolean) {
 function getData() {
 	insertsDone = false;
 	request(requestOptions, async (err, res, body) => {
-		const start = new Date();
-		const t = new Date();
-		const currentTimestamp = t.setHours(t.getHours(), 0, 0, 0) / 1000;
-		if (err) {
-			console.log('ERROR in bitmex request');
-			console.log(err);
-			const needToSleep = 1000 - (new Date() - start);
-			if (needToSleep > 0) await sleep(needToSleep);
-			insertsDone = true;
-			return;
-		}
-
-		if (res.statusCode == 200 && isJSON(body)) {
-			let json = JSON.parse(body);
-			const tmpTrades = populateTmpData(json, currentTimestamp);
-			if (tmpTrades.length > 0) {
-				lastTradeId = json[0].trdMatchID;
-				lastTimestamp = json[0].timestamp;
-				if (tmpTrades.length > 900) {
-					console.log(new Date().toLocaleTimeString() + ' length over 900 actual > ' + tmpTrades.length);
-				}
-
-				let trades = mergeTmpTrades(tmpTrades);
-
-				trades = trades.map(
-					(e) =>
-						(e = {
-							price: e.price,
-							side: e.side.charAt(0).toLowerCase() + e.side.slice(1),
-							size: e.size,
-							timestamp: e.timestamp,
-						})
-				);
-
-				const model = priceVolume.getCurrentDayCollectionModel();
-				let existingPrices = await model.find({ timestamp: currentTimestamp }).exec();
-				fastSort(existingPrices).asc((d) => d.price);
-				const updateBulk = populateUpdateBulk(trades, existingPrices, model);
-
-				if (updateBulk.length > 0) await model.bulkWrite(updateBulk).catch((err) => console.log(err));
-
-				if (tmpTrades.length > 500)
-					console.log(`Time > ${new Date() - start} | size > ${tmpTrades.length} mSize > ${trades.length}`);
-			}
-			const needToSleep = 1000 - (new Date() - start);
-			if (needToSleep > 0) await sleep(needToSleep);
-
-			insertsDone = true;
-		} else {
-			// TODO implement 429 sleep.. haven't gotten 429 in a week
-			console.log(res.headers);
-			console.log('status isnt 200 it is > ' + res.statusCode);
-			const needToSleep = 1000 - (new Date() - start);
-			if (needToSleep > 0) {
-				await sleep(needToSleep);
-			}
-			insertsDone = true;
-		}
+		insertNewData(err, res, body);
 	});
+}
+
+async function insertNewData(err, res, body) {
+	const start = new Date();
+	const t = new Date();
+	const currentTimestamp = t.setHours(t.getHours(), 0, 0, 0) / 1000;
+	if (err) {
+		console.log('ERROR in bitmex request');
+		console.log(err);
+		const needToSleep = 1000 - (new Date() - start);
+		if (needToSleep > 0) await sleep(needToSleep);
+		insertsDone = true;
+		return;
+	}
+
+	if (res.statusCode == 200 && isJSON(body)) {
+		let json = JSON.parse(body);
+		const tmpTrades = populateTmpData(json, currentTimestamp);
+		if (tmpTrades.length > 0) {
+			lastTradeId = json[0].trdMatchID;
+			lastTimestamp = json[0].timestamp;
+			if (tmpTrades.length > 900) {
+				console.log(new Date().toLocaleTimeString() + ' length over 900 actual > ' + tmpTrades.length);
+			}
+
+			let trades = mergeTmpTrades(tmpTrades);
+
+			trades = trades.map(
+				(e) =>
+					(e = {
+						price: e.price,
+						side: e.side.charAt(0).toLowerCase() + e.side.slice(1),
+						size: e.size,
+						timestamp: e.timestamp,
+					})
+			);
+
+			const model = priceVolume.getCurrentDayCollectionModel();
+			let existingPrices = await model.find({ timestamp: currentTimestamp }).exec();
+			fastSort(existingPrices).asc((d) => d.price);
+			const updateBulk = populateUpdateBulk(trades, existingPrices, model);
+
+			if (updateBulk.length > 0) await model.bulkWrite(updateBulk).catch((err) => console.log(err));
+
+			if (tmpTrades.length > 500)
+				console.log(`Time > ${new Date() - start} | size > ${tmpTrades.length} mSize > ${trades.length}`);
+		}
+		const needToSleep = 1000 - (new Date() - start);
+		if (needToSleep > 0) await sleep(needToSleep);
+
+		insertsDone = true;
+	} else {
+		// TODO implement 429 sleep.. haven't gotten 429 in a week
+		console.log(res.headers);
+		console.log('status isnt 200 it is > ' + res.statusCode);
+		const needToSleep = 1000 - (new Date() - start);
+		if (needToSleep > 0) {
+			await sleep(needToSleep);
+		}
+		insertsDone = true;
+	}
 }
 
 function isJSON(str) {

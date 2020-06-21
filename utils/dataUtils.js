@@ -1,6 +1,6 @@
-const priceVolume = require('../models/priceVolume.js');
+const priceVolume = require(`${__dirname}/../models/priceVolume.js`);
 const fastSort = require('fast-sort');
-const PseudoCache = require('../models/pseudoCache.js');
+const PseudoCache = require(`${__dirname}/../models/pseudoCache.js`);
 
 const pseudoCache = new PseudoCache();
 
@@ -32,10 +32,9 @@ async function getPricesSeparately(reqHours) {
 	const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
 	let hoursOver = reqHours - (currentTime.getHours() + 1);
 	let model = priceVolume.getCurrentDayCollectionModel();
-
 	result = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0, timestamp: 0 }).lean().exec();
 	fastSort(result).asc((d) => d.price);
-
+	
 	if (hoursOver <= 0) {
 		// need only this days data
 		if (reqHours != 1) {
@@ -97,12 +96,12 @@ async function getPricesMerged(reqParam) {
 	const currentTime = new Date();
 	const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
 	let hoursOver = reqParam - (currentTime.getHours() + 1);
-	let model = priceVolume.getCurrentDayCollectionModel();
 	let resultMap = new Map();
-
+	let model = priceVolume.getCurrentDayCollectionModel();
 	result = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
 	dataToMap(result, resultMap);
-
+	
+	
 	if (hoursOver <= 0) {
 		// need only this days data
 		if (reqParam != 1) {
@@ -158,10 +157,9 @@ async function getSellAndBuy(reqHours) {
 	const currentTimestamp = currentTime.setHours(currentTime.getHours(), 0, 0, 0) / 1000;
 	let hoursOver = reqHours - (currentTime.getHours() + 1);
 	let model = priceVolume.getCurrentDayCollectionModel();
-
-	currentHourData = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
+	let currentHourData = await model.find({ timestamp: currentTimestamp }, { _id: 0, __v: 0 }).lean().exec();
 	result.push(buildSellAndBuy(currentTimestamp, currentHourData));
-
+	
 	if (hoursOver <= 0) {
 		// need only this days data
 		if (reqHours != 1) {
@@ -172,6 +170,7 @@ async function getSellAndBuy(reqHours) {
 	} else {
 		// need past days data
 		let data = await pseudoCache.getTodaysCache();
+		// console.log(data);
 		if (data.length > 0) sellAndBuyToResult(data, currentTimestamp, currentTime.getHours(), result);
 		let needDays = 0;
 		hoursOver % 24 == 0 ? (needDays = hoursOver / 24) : (needDays = Math.floor(hoursOver / 24) + 1);
@@ -241,11 +240,11 @@ function sellAndBuyToResult(data, startingTimestamp, hourCount, result) {
 
 function buildSellAndBuy(currentTimestamp, data) {
 	const sellTotal = data
-		.filter((e) => e.side == 'Sell')
+		.filter((e) => e.side == 'sell')
 		.map((e) => e.size)
 		.reduce((total, e) => e + total, 0);
 	const buyTotal = data
-		.filter((e) => e.side == 'Buy')
+		.filter((e) => e.side == 'buy')
 		.map((e) => e.size)
 		.reduce((total, e) => e + total, 0);
 	return { timestamp: currentTimestamp, sell: sellTotal, buy: buyTotal };

@@ -1,4 +1,4 @@
-const priceVolume = require('./priceVolume.js');
+const priceVolume = require(`${__dirname}/priceVolume.js`);
 
 class PseudoCache {
 	constructor() {
