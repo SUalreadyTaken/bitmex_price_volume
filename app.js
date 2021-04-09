@@ -29,8 +29,8 @@ const limiter = rateLimit({
 app.use(limiter);
 app.use('/pricevolume', priceVolumeController);
 let alternativeBoolean = undefined;
-
-if (process.env.USE_ALTERNATIVE_APPS) {
+let usingAlternative = process.env.USE_ALTERNATIVE_APPS;
+if (usingAlternative === true) {
 	getAlternativeBoolean();
 	// // ping heroku app so it doesn't fall asleep
 	setInterval(() => bitmexService.requestData(alternativeBoolean), 100);
